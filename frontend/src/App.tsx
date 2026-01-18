@@ -63,11 +63,14 @@ const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topi
 
     return (
         <div style={{ 
-            position: 'fixed', top: 0, right: 0, width: '400px', height: '100%', 
-            backgroundColor: '#fff', boxShadow: '-2px 0 5px rgba(0,0,0,0.1)', 
-            padding: '20px', overflowY: 'auto', zIndex: 1000, color: '#333'
+            height: '100%', 
+            borderLeft: '1px solid #ddd', 
+            padding: '20px', 
+            backgroundColor: '#fff', 
+            overflowY: 'auto',
+            color: '#333'
         }}>
-            <button onClick={onClose} style={{ float: 'right' }}>Close</button>
+            <button onClick={onClose} style={{ float: 'right', marginBottom: '10px' }}>Close</button>
             <h2 style={{ marginTop: 0 }}>{topic.title}</h2>
             <div style={{ marginBottom: '15px' }}>
                 <span 
@@ -133,47 +136,93 @@ const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topi
     );
 };
 
-const TopicNode = ({ topic, allTopics, onSelect, showAll }: { topic: Topic, allTopics: Topic[], onSelect: (t: Topic) => void, showAll: boolean }) => {
+interface TopicNodeProps {
+    topic: Topic;
+    allTopics: Topic[];
+    onSelect: (t: Topic) => void;
+    showAll: boolean;
+    expandedIds: Set<string>;
+    toggleExpand: (id: string) => void;
+    collapseOthers: (topic: Topic) => void;
+}
+
+const TopicNode = ({ topic, allTopics, onSelect, showAll, expandedIds, toggleExpand, collapseOthers }: TopicNodeProps) => {
     const children = allTopics
         .filter(t => t.parent_id === topic.id)
         .sort((a, b) => a.order_index - b.order_index);
 
-    // If a parent is "Completed" but we are not showing all, should we hide it?
-    // The requirement says: "When an item is learned, it is hidden in the default view"
-    
-    // However, if a child is learned but parent is not, we might still want to see the parent.
-    // So filtering should happen at the render level.
-    
-    // Note: If a parent is hidden, its children are naturally hidden in this recursive structure.
-    // But if a parent is "Pending" and child is "Completed", we want to show parent, and hide child (unless showAll).
+    const isExpanded = expandedIds.has(topic.id);
+    const hasChildren = children.length > 0;
 
     if (!showAll && topic.status === 'completed') {
         return null;
     }
 
     return (
-        <div style={{ marginLeft: '20px', borderLeft: '1px solid #ccc', paddingLeft: '10px' }}>
+        <div style={{ marginLeft: '20px', borderLeft: '1px solid #eee', paddingLeft: '10px' }}>
             <div 
-                style={{ 
-                    cursor: 'pointer', margin: '5px 0', padding: '4px', borderRadius: '4px',
-                    opacity: topic.status === 'completed' ? 0.6 : 1
-                }}
-                onClick={() => onSelect(topic)}
                 className="topic-item"
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f0f0'}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f9f9f9'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingRight: '10px' }}
             >
-                <span style={{ 
-                    fontWeight: children.length > 0 ? 'bold' : 'normal',
-                    textDecoration: topic.status === 'completed' ? 'line-through' : 'none'
-                }}>
-                    {topic.title}
-                </span>
-                {topic.description && <span style={{ color: '#666', fontSize: '0.9em', marginLeft: '8px' }}>- {topic.description}</span>}
+                <div 
+                    style={{ 
+                        cursor: 'pointer', margin: '5px 0', padding: '4px', borderRadius: '4px',
+                        opacity: topic.status === 'completed' ? 0.6 : 1,
+                        flex: 1,
+                        display: 'flex', alignItems: 'center'
+                    }}
+                    onClick={() => {
+                        if (hasChildren) {
+                            toggleExpand(topic.id);
+                        }
+                        onSelect(topic);
+                    }}
+                >
+                    {hasChildren && (
+                        <span style={{ marginRight: '5px', fontSize: '0.8em', width: '15px' }}>
+                            {isExpanded ? '▼' : '▶'}
+                        </span>
+                    )}
+                    <span style={{ 
+                        fontWeight: hasChildren ? 'bold' : 'normal',
+                        textDecoration: topic.status === 'completed' ? 'line-through' : 'none'
+                    }}>
+                        {topic.title}
+                    </span>
+                </div>
+
+                {hasChildren && isExpanded && (
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            collapseOthers(topic);
+                        }}
+                        style={{ fontSize: '0.7em', padding: '2px 5px', color: '#666', cursor: 'pointer', border: '1px solid #ddd', background: '#fff' }}
+                        title="Collapse siblings"
+                    >
+                        Collapse Others
+                    </button>
+                )}
             </div>
-            {children.map(child => (
-                <TopicNode key={child.id} topic={child} allTopics={allTopics} onSelect={onSelect} showAll={showAll} />
-            ))}
+            
+            {hasChildren && isExpanded && (
+                <div>
+                    {children.map(child => (
+                        <TopicNode 
+                            key={child.id} 
+                            topic={child} 
+                            allTopics={allTopics} 
+                            onSelect={onSelect} 
+                            showAll={showAll}
+                            expandedIds={expandedIds}
+                            toggleExpand={toggleExpand}
+                            collapseOthers={collapseOthers}
+                        />
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
@@ -186,6 +235,9 @@ function App() {
     const [models, setModels] = useState<LLMModel[]>([]);
     const [selectedModel, setSelectedModel] = useState("");
     const [showAll, setShowAll] = useState(false);
+    
+    // Folding State
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         loadTopics();
@@ -200,6 +252,12 @@ function App() {
             if (selectedTopic) {
                 const fresh = data.find(t => t.id === selectedTopic.id);
                 if (fresh) setSelectedTopic(fresh);
+            }
+            
+            // Auto-expand root topics on initial load if set is empty
+            if (expandedIds.size === 0 && data.length > 0) {
+                 const roots = data.filter(t => !t.parent_id);
+                 setExpandedIds(new Set(roots.map(r => r.id)));
             }
         } catch (e) {
             console.error(e);
@@ -235,79 +293,127 @@ function App() {
         }
     };
 
+    // Folding Logic
+    const toggleExpand = (id: string) => {
+        const newSet = new Set(expandedIds);
+        if (newSet.has(id)) {
+            newSet.delete(id);
+        } else {
+            newSet.add(id);
+        }
+        setExpandedIds(newSet);
+    };
+
+    const collapseAll = () => {
+        setExpandedIds(new Set());
+    };
+
+    const collapseOthers = (topic: Topic) => {
+        // Find siblings
+        const siblings = topics.filter(t => t.parent_id === topic.parent_id && t.id !== topic.id);
+        const newSet = new Set(expandedIds);
+        // Remove siblings from expanded
+        siblings.forEach(s => newSet.delete(s.id));
+        // Ensure self is added
+        newSet.add(topic.id);
+        setExpandedIds(newSet);
+    };
+
     const rootTopics = topics.filter(t => !t.parent_id);
 
     return (
-        <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'system-ui, sans-serif' }}>
-            <h1>Autodidact</h1>
-            <p>Enter a topic to generate a learning syllabus.</p>
-            
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
-                <input 
-                    type="text" 
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="e.g., Quantum Computing, Introduction to Pottery..."
-                    style={{ flex: 1, padding: '8px', fontSize: '16px', minWidth: '200px' }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
-                />
+        <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
+            {/* Left Column (Syllabus) */}
+            <div style={{ 
+                flex: selectedTopic ? '0 0 25%' : '1 1 auto', 
+                maxWidth: selectedTopic ? '25%' : '800px',
+                margin: selectedTopic ? '0' : '0 auto',
+                padding: '20px', 
+                overflowY: 'auto',
+                borderRight: selectedTopic ? '1px solid #ddd' : 'none',
+                transition: 'all 0.3s ease'
+            }}>
+                <h1>Autodidact</h1>
+                <p>Enter a topic to generate a learning syllabus.</p>
                 
-                <select 
-                    value={selectedModel} 
-                    onChange={e => setSelectedModel(e.target.value)}
-                    style={{ padding: '8px', fontSize: '14px' }}
-                >
-                    {models.map(m => (
-                        <option key={m.name} value={m.name}>{m.display_name}</option>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', gap: '5px' }}>
+                         <input 
+                            type="text" 
+                            value={prompt}
+                            onChange={(e) => setPrompt(e.target.value)}
+                            placeholder="e.g., Quantum Computing..."
+                            style={{ flex: 1, padding: '8px', fontSize: '16px' }}
+                            onKeyDown={(e) => e.key === 'Enter' && handleGenerate()}
+                        />
+                        <button 
+                            onClick={handleGenerate} 
+                            disabled={isLoading}
+                            style={{ padding: '8px 16px' }}
+                        >
+                            {isLoading ? "..." : "Gen"}
+                        </button>
+                    </div>
+                    
+                    <select 
+                        value={selectedModel} 
+                        onChange={e => setSelectedModel(e.target.value)}
+                        style={{ padding: '8px', fontSize: '14px', width: '100%' }}
+                    >
+                        {models.map(m => (
+                            <option key={m.name} value={m.name}>{m.display_name}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <hr />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '5px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <h2 style={{ fontSize: '1.2em', margin: 0 }}>Paths</h2>
+                        <button onClick={collapseAll} style={{ padding: '2px 6px', fontSize: '0.7em' }}>
+                            Collapse All
+                        </button>
+                    </div>
+                    <label style={{ fontSize: '0.8em', cursor: 'pointer' }}>
+                        <input 
+                            type="checkbox" 
+                            checked={showAll} 
+                            onChange={e => setShowAll(e.target.checked)} 
+                            style={{ marginRight: '5px' }}
+                        />
+                        Show Learned
+                    </label>
+                </div>
+
+                {topics.length === 0 && <p style={{ color: '#888' }}>No topics yet.</p>}
+                
+                <div>
+                    {rootTopics.map(root => (
+                        <TopicNode 
+                            key={root.id} 
+                            topic={root} 
+                            allTopics={topics} 
+                            onSelect={setSelectedTopic} 
+                            showAll={showAll}
+                            expandedIds={expandedIds}
+                            toggleExpand={toggleExpand}
+                            collapseOthers={collapseOthers}
+                        />
                     ))}
-                    {models.length === 0 && <option value="">Loading models...</option>}
-                </select>
-
-                <button 
-                    onClick={handleGenerate} 
-                    disabled={isLoading}
-                    style={{ padding: '8px 16px', fontSize: '16px', cursor: isLoading ? 'wait' : 'pointer' }}
-                >
-                    {isLoading ? "Generating..." : "Generate"}
-                </button>
+                </div>
             </div>
 
-            <hr />
-
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2>My Learning Paths</h2>
-                <label style={{ fontSize: '0.9em', cursor: 'pointer' }}>
-                    <input 
-                        type="checkbox" 
-                        checked={showAll} 
-                        onChange={e => setShowAll(e.target.checked)} 
-                        style={{ marginRight: '5px' }}
-                    />
-                    Show Learned
-                </label>
-            </div>
-
-            {topics.length === 0 && <p style={{ color: '#888' }}>No topics yet. Start by generating one!</p>}
-            
-            <div>
-                {rootTopics.map(root => (
-                    <TopicNode 
-                        key={root.id} 
-                        topic={root} 
-                        allTopics={topics} 
-                        onSelect={setSelectedTopic} 
-                        showAll={showAll}
-                    />
-                ))}
-            </div>
-
+            {/* Right Column (Details) */}
             {selectedTopic && (
-                <TopicDetails 
-                    topic={selectedTopic} 
-                    onClose={() => setSelectedTopic(null)} 
-                    selectedModel={selectedModel}
-                    onUpdate={loadTopics}
-                />
+                <div style={{ flex: '1 1 75%', overflow: 'hidden' }}>
+                    <TopicDetails 
+                        topic={selectedTopic} 
+                        onClose={() => setSelectedTopic(null)} 
+                        selectedModel={selectedModel}
+                        onUpdate={loadTopics}
+                    />
+                </div>
             )}
         </div>
     );
