@@ -1,0 +1,17 @@
+# Backend
+backend/venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/autodidact.db
+autodidact.db
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Frontend (already has its own, but good to be safe)
+frontend/node_modules/
+frontend/dist/
+
+# System
+.DS_Store
+.gemini/
