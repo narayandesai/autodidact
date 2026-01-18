@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { generateSyllabus, getTopics, getResources, addUrlResource, uploadPdfResource, getModels, updateTopicStatus } from './api';
+import { generateSyllabus, getTopics, getResources, addUrlResource, uploadPdfResource, getModels, updateTopicStatus, elaborateTopic, askTopic } from './api';
 import type { Topic, Resource, LLMModel } from './api';
 import './App.css';
 
@@ -8,9 +8,15 @@ const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topi
     const [resources, setResources] = useState<Resource[]>([]);
     const [newUrl, setNewUrl] = useState("");
     const [isUploading, setIsUploading] = useState(false);
+    
+    // Assistant State
+    const [assistantInput, setAssistantInput] = useState("");
+    const [isThinking, setIsThinking] = useState(false);
+    const [chatResponse, setChatResponse] = useState<string | null>(null);
 
     useEffect(() => {
         loadResources();
+        setChatResponse(null); // Clear chat on topic change
     }, [topic]);
 
     const loadResources = async () => {
@@ -53,11 +59,38 @@ const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topi
         const newStatus = topic.status === 'completed' ? 'pending' : 'completed';
         try {
             await updateTopicStatus(topic.id, newStatus);
-            onUpdate(); // Refresh parent list
-            // Note: We are relying on the parent to refresh 'topic' prop eventually, 
-            // but for now the parent closes or re-renders details.
+            onUpdate(); 
         } catch(e) {
             alert("Error updating status: " + e);
+        }
+    };
+
+    // AI Actions
+    const handleElaborate = async () => {
+        setIsThinking(true);
+        try {
+            await elaborateTopic(topic.id, assistantInput, selectedModel);
+            onUpdate(); // Refresh parent to see new subtopics/description
+            await loadResources(); // Refresh resources
+            setAssistantInput(""); // Clear input if it was used as context
+            setChatResponse("Topic expanded successfully! Check the description, sub-topics, and resources.");
+        } catch(e) {
+            alert("Error elaborating: " + e);
+        } finally {
+            setIsThinking(false);
+        }
+    };
+
+    const handleAsk = async () => {
+        if (!assistantInput) return;
+        setIsThinking(true);
+        try {
+            const res = await askTopic(topic.id, assistantInput, selectedModel);
+            setChatResponse(res.answer);
+        } catch (e) {
+            alert("Error asking: " + e);
+        } finally {
+            setIsThinking(false);
         }
     };
 
@@ -68,70 +101,116 @@ const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topi
             padding: '20px', 
             backgroundColor: '#fff', 
             overflowY: 'auto',
-            color: '#333'
+            color: '#333',
+            display: 'flex', flexDirection: 'column'
         }}>
-            <button onClick={onClose} style={{ float: 'right', marginBottom: '10px' }}>Close</button>
-            <h2 style={{ marginTop: 0 }}>{topic.title}</h2>
-            <div style={{ marginBottom: '15px' }}>
-                <span 
-                    style={{ 
-                        padding: '4px 8px', borderRadius: '4px', fontSize: '0.8em',
-                        backgroundColor: topic.status === 'completed' ? '#d4edda' : '#fff3cd',
-                        color: topic.status === 'completed' ? '#155724' : '#856404',
-                        border: '1px solid transparent'
-                    }}
-                >
-                    {topic.status.toUpperCase()}
-                </span>
-                <button 
-                    onClick={toggleStatus} 
-                    style={{ marginLeft: '10px', fontSize: '0.8em', padding: '2px 8px' }}
-                >
-                    Mark as {topic.status === 'completed' ? 'Pending' : 'Learned'}
-                </button>
-            </div>
-            <p>{topic.description}</p>
-            
-            <h3>Resources</h3>
-            <div style={{ marginBottom: '20px', display: 'flex', gap: '5px' }}>
-                <input 
-                    type="text" 
-                    value={newUrl} 
-                    onChange={e => setNewUrl(e.target.value)} 
-                    placeholder="Add URL..." 
-                    style={{ flex: 1, padding: '5px' }}
-                />
-                <button onClick={handleAddUrl} disabled={isUploading}>Add</button>
-            </div>
-            <div style={{ marginBottom: '20px' }}>
-                <label>Upload PDF: </label>
-                <input type="file" accept=".pdf" onChange={handleFileUpload} disabled={isUploading} />
-            </div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '10px' }}>
+                    <h2 style={{ marginTop: 0, marginRight: '10px' }}>{topic.title}</h2>
+                    <button onClick={onClose}>Close</button>
+                </div>
+                
+                <div style={{ marginBottom: '15px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span 
+                        style={{ 
+                            padding: '4px 8px', borderRadius: '4px', fontSize: '0.8em',
+                            backgroundColor: topic.status === 'completed' ? '#d4edda' : '#fff3cd',
+                            color: topic.status === 'completed' ? '#155724' : '#856404',
+                            border: '1px solid transparent'
+                        }}
+                    >
+                        {topic.status.toUpperCase()}
+                    </span>
+                    <button 
+                        onClick={toggleStatus} 
+                        style={{ fontSize: '0.8em', padding: '4px 8px' }}
+                    >
+                        {topic.status === 'completed' ? 'Mark Pending' : 'Mark Learned'}
+                    </button>
+                    <button 
+                        onClick={handleElaborate}
+                        disabled={isThinking}
+                        style={{ fontSize: '0.8em', padding: '4px 8px', backgroundColor: '#e7f1ff', color: '#004085', border: '1px solid #b8daff' }}
+                    >
+                        {isThinking ? "Thinking..." : "✨ Elaborate & Expand"}
+                    </button>
+                </div>
 
-            {isUploading && <p>Processing with {selectedModel || 'default model'}...</p>}
-
-            <ul style={{ listStyle: 'none', padding: 0 }}>
-                {resources.map(res => (
-                    <li key={res.id} style={{ marginBottom: '15px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
-                        <div style={{wordBreak: 'break-all'}}>
-                            <strong>[{res.type.toUpperCase()}]</strong> 
-                            {res.type === 'url' ? (
-                                <a href={res.path_or_url} target="_blank" rel="noreferrer" style={{ marginLeft: '5px' }}>
-                                    {res.path_or_url}
-                                </a>
-                            ) : (
-                                <span style={{ marginLeft: '5px' }}>{res.path_or_url}</span>
-                            )}
-                        </div>
-                        {res.content_summary && (
-                            <div style={{ fontSize: '0.9em', color: '#555', marginTop: '5px' }}>
-                                <strong>Summary:</strong> {res.content_summary}
+                <div style={{ whiteSpace: 'pre-wrap', lineHeight: '1.5', color: '#444', marginBottom: '20px' }}>
+                    {topic.description || <em>No description yet. Click 'Elaborate' to generate one.</em>}
+                </div>
+                
+                <h3>Resources</h3>
+                <ul style={{ listStyle: 'none', padding: 0 }}>
+                    {resources.map(res => (
+                        <li key={res.id} style={{ marginBottom: '15px', borderBottom: '1px solid #eee', paddingBottom: '10px' }}>
+                            <div style={{wordBreak: 'break-all'}}>
+                                <strong>[{res.type.toUpperCase()}]</strong> 
+                                {res.type === 'url' ? (
+                                    <a href={res.path_or_url} target="_blank" rel="noreferrer" style={{ marginLeft: '5px' }}>
+                                        {res.path_or_url}
+                                    </a>
+                                ) : (
+                                    <span style={{ marginLeft: '5px' }}>{res.path_or_url}</span>
+                                )}
                             </div>
-                        )}
-                    </li>
-                ))}
-                {resources.length === 0 && !isUploading && <p>No resources yet.</p>}
-            </ul>
+                            {res.content_summary && (
+                                <div style={{ fontSize: '0.9em', color: '#555', marginTop: '5px' }}>
+                                    <strong>Summary:</strong> {res.content_summary}
+                                </div>
+                            )}
+                        </li>
+                    ))}
+                    {resources.length === 0 && !isUploading && <p style={{ color: '#888' }}>No resources yet.</p>}
+                </ul>
+
+                <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h4>Add Resource</h4>
+                    <div style={{ marginBottom: '10px', display: 'flex', gap: '5px' }}>
+                        <input 
+                            type="text" 
+                            value={newUrl} 
+                            onChange={e => setNewUrl(e.target.value)} 
+                            placeholder="Paste URL..." 
+                            style={{ flex: 1, padding: '5px' }}
+                        />
+                        <button onClick={handleAddUrl} disabled={isUploading}>Add</button>
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.9em' }}>Upload PDF: </label>
+                        <input type="file" accept=".pdf" onChange={handleFileUpload} disabled={isUploading} />
+                    </div>
+                    {isUploading && <p style={{ fontSize: '0.9em', color: '#666' }}>Processing...</p>}
+                </div>
+            </div>
+
+            <div style={{ marginTop: '20px', borderTop: '2px solid #eee', paddingTop: '15px' }}>
+                <h4>AI Assistant</h4>
+                {chatResponse && (
+                    <div style={{ 
+                        backgroundColor: '#e9ecef', padding: '10px', borderRadius: '8px', 
+                        marginBottom: '10px', fontSize: '0.95em', borderLeft: '4px solid #007bff'
+                    }}>
+                        {chatResponse}
+                    </div>
+                )}
+                <div style={{ display: 'flex', gap: '5px' }}>
+                    <textarea 
+                        value={assistantInput}
+                        onChange={e => setAssistantInput(e.target.value)}
+                        placeholder="Ask a question or give instructions for elaboration..."
+                        style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ccc', resize: 'vertical', minHeight: '60px' }}
+                    />
+                </div>
+                <div style={{ marginTop: '5px', display: 'flex', justifyContent: 'flex-end', gap: '5px' }}>
+                    <button onClick={handleElaborate} disabled={isThinking} title="Use input to guide topic expansion">
+                        Refine Topic
+                    </button>
+                    <button onClick={handleAsk} disabled={isThinking} title="Ask a question about this topic">
+                        Ask Question
+                    </button>
+                </div>
+            </div>
         </div>
     );
 };

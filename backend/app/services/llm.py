@@ -2,6 +2,7 @@ import os
 import json
 import google.generativeai as genai
 from typing import List, Dict, Any
+from app.prompts import syllabus_prompt, summary_prompt, elaboration_prompt, chat_prompt
 
 # Configure the API key
 API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -45,28 +46,7 @@ class LLMService:
              # Fallback mock for when no key is present (useful for testing/dev without credentials)
             return self._mock_syllabus(topic)
 
-        prompt = f"""
-        You are an expert curriculum designer. Create a comprehensive, hierarchical learning syllabus for the topic: "{topic}".
-        
-        Output strictly valid JSON. The structure should be a list of modules, where each module has a title, description, and a list of sub-topics.
-        
-        Format:
-        {{
-            "title": "{topic}",
-            "description": "A comprehensive guide to {topic}",
-            "modules": [
-                {{
-                    "title": "Module 1 Title",
-                    "description": "Brief description",
-                    "subtopics": [
-                        {{ "title": "Subtopic 1", "description": "..." }},
-                        ...
-                    ]
-                }},
-                ...
-            ]
-        }}
-        """
+        prompt = syllabus_prompt(topic)
 
         try:
             model = self.get_model(model_name)
@@ -107,13 +87,7 @@ class LLMService:
         if not API_KEY:
             return "Mock summary: Key concepts include X, Y, and Z. (No API Key)"
             
-        prompt = f"""
-        Summarize the following text into key learning concepts suitable for a student.
-        Keep it concise and structured.
-        
-        Text:
-        {text[:10000]} # Truncate to avoid token limits for now
-        """
+        prompt = summary_prompt(text)
         
         try:
             model = self.get_model(model_name)
@@ -122,3 +96,41 @@ class LLMService:
         except Exception as e:
             print(f"Error summarizing text: {e}")
             return "Error generating summary."
+
+    async def elaborate_topic(self, topic_title: str, current_description: str, instruction: str = "", model_name: str | None = None) -> Dict[str, Any]:
+        """
+        Generates a detailed expansion of a topic, including better description, 
+        sub-topics, and external resources.
+        """
+        if not API_KEY:
+            return {
+                "description": f"Mock elaborated description for {topic_title}.",
+                "subtopics": [{"title": "Mock Subtopic", "description": "Mock desc"}],
+                "resources": [{"title": "Mock Wiki", "url": "http://example.com", "type": "url"}]
+            }
+
+        prompt = elaboration_prompt(topic_title, current_description, instruction)
+
+        try:
+            model = self.get_model(model_name)
+            response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+            return json.loads(response.text)
+        except Exception as e:
+            print(f"Error elaborating topic: {e}")
+            raise e
+
+    async def chat_with_topic(self, topic_title: str, context: str, question: str, model_name: str | None = None) -> str:
+        """
+        Answers a user question based on the topic context.
+        """
+        if not API_KEY:
+            return f"Mock answer to '{question}' regarding {topic_title}."
+
+        prompt = chat_prompt(topic_title, context, question)
+        
+        try:
+            model = self.get_model(model_name)
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"Error answering question: {e}"

@@ -43,6 +43,30 @@ export async function updateTopicStatus(topicId: string, status: "pending" | "co
     return response.json();
 }
 
+export async function elaborateTopic(topicId: string, instruction: string, modelName?: string): Promise<Topic> {
+    const response = await fetch(`${API_BASE}/topics/${topicId}/elaborate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ instruction, model_name: modelName })
+    });
+    if (!response.ok) {
+        throw new Error("Failed to elaborate topic");
+    }
+    return response.json();
+}
+
+export async function askTopic(topicId: string, question: string, modelName?: string): Promise<{ answer: string }> {
+    const response = await fetch(`${API_BASE}/topics/${topicId}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, model_name: modelName })
+    });
+    if (!response.ok) {
+        throw new Error("Failed to ask question");
+    }
+    return response.json();
+}
+
 export async function generateSyllabus(prompt: string, modelName?: string): Promise<Topic> {
     let url = `${API_BASE}/topics/generate?prompt=${encodeURIComponent(prompt)}`;
     if (modelName) {

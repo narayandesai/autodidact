@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlmodel import Session, select
 from typing import List
 from app.database import get_session
-from app.models import Topic
+from app.models import Topic, Resource, ResourceType
 from app.services.llm import LLMService
 import uuid
 
@@ -56,6 +56,85 @@ async def generate_topic_syllabus(
 
     root_topic = create_topic_recursive(syllabus_data)
     return root_topic
+
+@router.post("/{topic_id}/elaborate", response_model=Topic)
+async def elaborate_topic(
+    topic_id: uuid.UUID,
+    instruction: str = Body("", embed=True),
+    model_name: str = Body(None, embed=True),
+    session: Session = Depends(get_session)
+):
+    """
+    Elaborates on a topic: updates description, adds sub-topics, adds resources.
+    """
+    topic = session.get(Topic, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    try:
+        data = await llm_service.elaborate_topic(
+            topic_title=topic.title, 
+            current_description=topic.description or "", 
+            instruction=instruction,
+            model_name=model_name
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM Elaboration failed: {str(e)}")
+
+    # 1. Update Description
+    if data.get("description"):
+        topic.description = data["description"]
+        session.add(topic)
+    
+    # 2. Add Subtopics (Find next order index)
+    existing_children = session.exec(select(Topic).where(Topic.parent_id == topic.id)).all()
+    next_order = len(existing_children)
+
+    for sub in data.get("subtopics", []):
+        new_topic = Topic(
+            title=sub["title"],
+            description=sub.get("description", ""),
+            parent_id=topic.id,
+            order_index=next_order
+        )
+        session.add(new_topic)
+        next_order += 1
+
+    # 3. Add Resources
+    for res in data.get("resources", []):
+        new_res = Resource(
+            topic_id=topic.id,
+            type=ResourceType.URL,
+            path_or_url=res["url"],
+            content_summary=f"Recommended: {res['title']}"
+        )
+        session.add(new_res)
+
+    session.commit()
+    session.refresh(topic)
+    return topic
+
+@router.post("/{topic_id}/ask")
+async def ask_topic(
+    topic_id: uuid.UUID,
+    question: str = Body(..., embed=True),
+    model_name: str = Body(None, embed=True),
+    session: Session = Depends(get_session)
+):
+    """
+    Ask a question about the topic. Returns a plain text answer.
+    """
+    topic = session.get(Topic, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+        
+    answer = await llm_service.chat_with_topic(
+        topic_title=topic.title,
+        context=topic.description or "",
+        question=question,
+        model_name=model_name
+    )
+    return {"answer": answer}
 
 @router.patch("/{topic_id}/status", response_model=Topic)
 def update_topic_status(
