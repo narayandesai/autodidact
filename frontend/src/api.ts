@@ -4,7 +4,8 @@ export interface Topic {
     description?: string;
     parent_id?: string;
     order_index: number;
-    children?: Topic[]; // Helper for UI, though DB structure is flat-ish with parent_id
+    children?: Topic[]; // Helper for UI
+    status: "pending" | "completed";
 }
 
 export interface Resource {
@@ -28,6 +29,16 @@ export async function getModels(): Promise<LLMModel[]> {
     const response = await fetch(`${API_BASE}/topics/models`);
     if (!response.ok) {
         throw new Error("Failed to fetch models");
+    }
+    return response.json();
+}
+
+export async function updateTopicStatus(topicId: string, status: "pending" | "completed"): Promise<Topic> {
+    const response = await fetch(`${API_BASE}/topics/${topicId}/status?status=${status}`, {
+        method: "PATCH",
+    });
+    if (!response.ok) {
+        throw new Error("Failed to update topic status");
     }
     return response.json();
 }

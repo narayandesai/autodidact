@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { generateSyllabus, getTopics, getResources, addUrlResource, uploadPdfResource, getModels } from './api';
+import { generateSyllabus, getTopics, getResources, addUrlResource, uploadPdfResource, getModels, updateTopicStatus } from './api';
 import type { Topic, Resource, LLMModel } from './api';
 import './App.css';
 
 // Component to display details of a selected topic
-const TopicDetails = ({ topic, onClose, selectedModel }: { topic: Topic, onClose: () => void, selectedModel?: string }) => {
+const TopicDetails = ({ topic, onClose, selectedModel, onUpdate }: { topic: Topic, onClose: () => void, selectedModel?: string, onUpdate: () => void }) => {
     const [resources, setResources] = useState<Resource[]>([]);
     const [newUrl, setNewUrl] = useState("");
     const [isUploading, setIsUploading] = useState(false);
@@ -49,6 +49,18 @@ const TopicDetails = ({ topic, onClose, selectedModel }: { topic: Topic, onClose
         }
     };
 
+    const toggleStatus = async () => {
+        const newStatus = topic.status === 'completed' ? 'pending' : 'completed';
+        try {
+            await updateTopicStatus(topic.id, newStatus);
+            onUpdate(); // Refresh parent list
+            // Note: We are relying on the parent to refresh 'topic' prop eventually, 
+            // but for now the parent closes or re-renders details.
+        } catch(e) {
+            alert("Error updating status: " + e);
+        }
+    };
+
     return (
         <div style={{ 
             position: 'fixed', top: 0, right: 0, width: '400px', height: '100%', 
@@ -57,6 +69,24 @@ const TopicDetails = ({ topic, onClose, selectedModel }: { topic: Topic, onClose
         }}>
             <button onClick={onClose} style={{ float: 'right' }}>Close</button>
             <h2 style={{ marginTop: 0 }}>{topic.title}</h2>
+            <div style={{ marginBottom: '15px' }}>
+                <span 
+                    style={{ 
+                        padding: '4px 8px', borderRadius: '4px', fontSize: '0.8em',
+                        backgroundColor: topic.status === 'completed' ? '#d4edda' : '#fff3cd',
+                        color: topic.status === 'completed' ? '#155724' : '#856404',
+                        border: '1px solid transparent'
+                    }}
+                >
+                    {topic.status.toUpperCase()}
+                </span>
+                <button 
+                    onClick={toggleStatus} 
+                    style={{ marginLeft: '10px', fontSize: '0.8em', padding: '2px 8px' }}
+                >
+                    Mark as {topic.status === 'completed' ? 'Pending' : 'Learned'}
+                </button>
+            </div>
             <p>{topic.description}</p>
             
             <h3>Resources</h3>
@@ -76,7 +106,6 @@ const TopicDetails = ({ topic, onClose, selectedModel }: { topic: Topic, onClose
             </div>
 
             {isUploading && <p>Processing with {selectedModel || 'default model'}...</p>}
-// ... (rest of TopicDetails remains similar)
 
             <ul style={{ listStyle: 'none', padding: 0 }}>
                 {resources.map(res => (
@@ -104,25 +133,46 @@ const TopicDetails = ({ topic, onClose, selectedModel }: { topic: Topic, onClose
     );
 };
 
-const TopicNode = ({ topic, allTopics, onSelect }: { topic: Topic, allTopics: Topic[], onSelect: (t: Topic) => void }) => {
+const TopicNode = ({ topic, allTopics, onSelect, showAll }: { topic: Topic, allTopics: Topic[], onSelect: (t: Topic) => void, showAll: boolean }) => {
     const children = allTopics
         .filter(t => t.parent_id === topic.id)
         .sort((a, b) => a.order_index - b.order_index);
 
+    // If a parent is "Completed" but we are not showing all, should we hide it?
+    // The requirement says: "When an item is learned, it is hidden in the default view"
+    
+    // However, if a child is learned but parent is not, we might still want to see the parent.
+    // So filtering should happen at the render level.
+    
+    // Note: If a parent is hidden, its children are naturally hidden in this recursive structure.
+    // But if a parent is "Pending" and child is "Completed", we want to show parent, and hide child (unless showAll).
+
+    if (!showAll && topic.status === 'completed') {
+        return null;
+    }
+
     return (
         <div style={{ marginLeft: '20px', borderLeft: '1px solid #ccc', paddingLeft: '10px' }}>
             <div 
-                style={{ cursor: 'pointer', margin: '5px 0', padding: '4px', borderRadius: '4px' }}
+                style={{ 
+                    cursor: 'pointer', margin: '5px 0', padding: '4px', borderRadius: '4px',
+                    opacity: topic.status === 'completed' ? 0.6 : 1
+                }}
                 onClick={() => onSelect(topic)}
                 className="topic-item"
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = '#f0f0f0'}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
             >
-                <span style={{ fontWeight: children.length > 0 ? 'bold' : 'normal' }}>{topic.title}</span>
+                <span style={{ 
+                    fontWeight: children.length > 0 ? 'bold' : 'normal',
+                    textDecoration: topic.status === 'completed' ? 'line-through' : 'none'
+                }}>
+                    {topic.title}
+                </span>
                 {topic.description && <span style={{ color: '#666', fontSize: '0.9em', marginLeft: '8px' }}>- {topic.description}</span>}
             </div>
             {children.map(child => (
-                <TopicNode key={child.id} topic={child} allTopics={allTopics} onSelect={onSelect} />
+                <TopicNode key={child.id} topic={child} allTopics={allTopics} onSelect={onSelect} showAll={showAll} />
             ))}
         </div>
     );
@@ -135,6 +185,7 @@ function App() {
     const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
     const [models, setModels] = useState<LLMModel[]>([]);
     const [selectedModel, setSelectedModel] = useState("");
+    const [showAll, setShowAll] = useState(false);
 
     useEffect(() => {
         loadTopics();
@@ -145,10 +196,16 @@ function App() {
         try {
             const data = await getTopics();
             setTopics(data);
+            // If selected topic exists, update it with fresh data
+            if (selectedTopic) {
+                const fresh = data.find(t => t.id === selectedTopic.id);
+                if (fresh) setSelectedTopic(fresh);
+            }
         } catch (e) {
             console.error(e);
         }
     };
+// ... (rest of App component)
 
     const loadModels = async () => {
         try {
@@ -217,12 +274,30 @@ function App() {
 
             <hr />
 
-            <h2>My Learning Paths</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2>My Learning Paths</h2>
+                <label style={{ fontSize: '0.9em', cursor: 'pointer' }}>
+                    <input 
+                        type="checkbox" 
+                        checked={showAll} 
+                        onChange={e => setShowAll(e.target.checked)} 
+                        style={{ marginRight: '5px' }}
+                    />
+                    Show Learned
+                </label>
+            </div>
+
             {topics.length === 0 && <p style={{ color: '#888' }}>No topics yet. Start by generating one!</p>}
             
             <div>
                 {rootTopics.map(root => (
-                    <TopicNode key={root.id} topic={root} allTopics={topics} onSelect={setSelectedTopic} />
+                    <TopicNode 
+                        key={root.id} 
+                        topic={root} 
+                        allTopics={topics} 
+                        onSelect={setSelectedTopic} 
+                        showAll={showAll}
+                    />
                 ))}
             </div>
 
@@ -231,6 +306,7 @@ function App() {
                     topic={selectedTopic} 
                     onClose={() => setSelectedTopic(null)} 
                     selectedModel={selectedModel}
+                    onUpdate={loadTopics}
                 />
             )}
         </div>

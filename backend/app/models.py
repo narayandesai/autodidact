@@ -9,6 +9,10 @@ class ResourceType(str, Enum):
     URL = "url"
     TEXT = "text"
 
+class TopicStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+
 class LinkType(str, Enum):
     RELATED = "related"
     PREREQUISITE = "prerequisite"
@@ -25,6 +29,7 @@ class TopicBase(SQLModel):
     description: Optional[str] = None
     parent_id: Optional[uuid.UUID] = Field(default=None) # Points to another Topic.id
     order_index: int = 0
+    status: TopicStatus = Field(default=TopicStatus.PENDING)
 
 class Topic(TopicBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

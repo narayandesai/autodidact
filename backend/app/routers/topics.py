@@ -55,8 +55,30 @@ async def generate_topic_syllabus(
         return topic
 
     root_topic = create_topic_recursive(syllabus_data)
-    session.refresh(root_topic)
     return root_topic
+
+@router.patch("/{topic_id}/status", response_model=Topic)
+def update_topic_status(
+    topic_id: uuid.UUID,
+    status: str, # We'll validate this against the enum or let Pydantic handle it if we used the schema
+    session: Session = Depends(get_session)
+):
+    """
+    Updates the status of a topic (e.g. pending -> completed).
+    """
+    topic = session.get(Topic, topic_id)
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    
+    # Simple validation, though Pydantic would be better if we had a Request model
+    if status not in ["pending", "completed"]:
+         raise HTTPException(status_code=400, detail="Invalid status")
+         
+    topic.status = status
+    session.add(topic)
+    session.commit()
+    session.refresh(topic)
+    return topic
 
 @router.get("/", response_model=List[Topic])
 def read_topics(session: Session = Depends(get_session)):
