@@ -143,10 +143,9 @@ interface TopicNodeProps {
     showAll: boolean;
     expandedIds: Set<string>;
     toggleExpand: (id: string) => void;
-    collapseOthers: (topic: Topic) => void;
 }
 
-const TopicNode = ({ topic, allTopics, onSelect, showAll, expandedIds, toggleExpand, collapseOthers }: TopicNodeProps) => {
+const TopicNode = ({ topic, allTopics, onSelect, showAll, expandedIds, toggleExpand }: TopicNodeProps) => {
     const children = allTopics
         .filter(t => t.parent_id === topic.id)
         .sort((a, b) => a.order_index - b.order_index);
@@ -192,19 +191,6 @@ const TopicNode = ({ topic, allTopics, onSelect, showAll, expandedIds, toggleExp
                         {topic.title}
                     </span>
                 </div>
-
-                {hasChildren && isExpanded && (
-                    <button 
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            collapseOthers(topic);
-                        }}
-                        style={{ fontSize: '0.7em', padding: '2px 5px', color: '#666', cursor: 'pointer', border: '1px solid #ddd', background: '#fff' }}
-                        title="Collapse siblings"
-                    >
-                        Collapse Others
-                    </button>
-                )}
             </div>
             
             {hasChildren && isExpanded && (
@@ -218,7 +204,6 @@ const TopicNode = ({ topic, allTopics, onSelect, showAll, expandedIds, toggleExp
                             showAll={showAll}
                             expandedIds={expandedIds}
                             toggleExpand={toggleExpand}
-                            collapseOthers={collapseOthers}
                         />
                     ))}
                 </div>
@@ -398,7 +383,6 @@ function App() {
                             showAll={showAll}
                             expandedIds={expandedIds}
                             toggleExpand={toggleExpand}
-                            collapseOthers={collapseOthers}
                         />
                     ))}
                 </div>
