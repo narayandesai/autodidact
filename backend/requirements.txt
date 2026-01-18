@@ -10,3 +10,4 @@ pytest
 httpx
 pytest-asyncio
 
+alembic==1.18.1
