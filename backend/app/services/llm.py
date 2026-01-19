@@ -105,6 +105,16 @@ class LLMService:
         if not API_KEY:
             return {
                 "description": f"Mock elaborated description for {topic_title}.",
+                "concepts": [
+                    {
+                        "title": "Mock Concept 1",
+                        "description": "A fundamental mock concept.",
+                        "activities": [
+                            {"type": "read", "instructions": "Read this mock text.", "content": "Mock reading content."},
+                            {"type": "quiz", "instructions": "Take this mock quiz.", "content": {"question": "Is this a mock?", "options": ["Yes", "No"], "correct": "Yes"}}
+                        ]
+                    }
+                ],
                 "subtopics": [{"title": "Mock Subtopic", "description": "Mock desc"}],
                 "resources": [{"title": "Mock Wiki", "url": "http://example.com", "type": "url"}]
             }

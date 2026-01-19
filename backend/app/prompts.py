@@ -52,12 +52,25 @@ def elaboration_prompt(topic_title: str, current_description: str, instruction: 
 
     Instructions:
     1. **Explanation**: Write a comprehensive description in Markdown. Imagine you are explaining this to a smart 12-year-old. Use analogies and simple language to demystify complex ideas.
-    2. **Sub-topics**: Identify 3-5 logical next steps to deepen understanding.
-    3. **Resources**: Curate 3-5 high-quality external resources (Documentation, Articles, Video Search queries).
+    2. **Concepts**: Identify 3-5 core concepts (chunks) that make up this topic. For each concept, provide:
+        - A title and description.
+        - 3 Learning Activities (Recall, Understanding, Application) based on Bloom's Taxonomy.
+    3. **Sub-topics**: Identify 3-5 logical next steps (sub-topics) to deepen understanding.
+    4. **Resources**: Curate 3-5 high-quality external resources (Documentation, Articles, Video Search queries).
     
     Output strictly valid JSON:
     {{
         "description": "Markdown string using Feynman technique...",
+        "concepts": [
+            {{
+                "title": "Concept Title", 
+                "description": "...", 
+                "activities": [
+                    {{ "type": "quiz", "instructions": "...", "content": {{ "question": "...", "options": [], "correct": "..." }} }},
+                    {{ "type": "read", "instructions": "...", "content": "..." }}
+                ]
+            }}
+        ],
         "subtopics": [
             {{ "title": "Subtopic Title", "description": "...", "subtopics": [] }}
         ],

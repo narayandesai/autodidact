@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlmodel import Session, select
 from typing import List
 from app.database import get_session
-from app.models import Topic, Resource, ResourceType
+from app.models import Topic, Resource, ResourceType, Concept, Activity, ActivityType
 from app.services.llm import LLMService
 import uuid
+import json
 
 router = APIRouter(prefix="/topics", tags=["topics"])
 llm_service = LLMService()
@@ -104,6 +105,39 @@ async def elaborate_topic(
             content_summary=f"Recommended: {res['title']}"
         )
         session.add(new_res)
+
+    # 4. Add Concepts and Activities
+    concepts_data = data.get("concepts", [])
+    
+    # Check existing concepts to append correctly (or we can just append)
+    existing_concepts = session.exec(select(Concept).where(Concept.topic_id == topic.id)).all()
+    concept_order = len(existing_concepts)
+
+    for concept_data in concepts_data:
+        new_concept = Concept(
+            title=concept_data["title"],
+            description=concept_data.get("description", ""),
+            topic_id=topic.id,
+            order_index=concept_order
+        )
+        session.add(new_concept)
+        session.commit() # Commit to get concept ID
+        session.refresh(new_concept)
+        concept_order += 1
+
+        # Add activities for this concept
+        for activity_data in concept_data.get("activities", []):
+            # Validate activity type (simple fallback)
+            act_type = activity_data.get("type", "read")
+            # Map string to Enum if needed, but Pydantic/SQLModel usually handles strings if they match values
+            
+            new_activity = Activity(
+                concept_id=new_concept.id,
+                type=act_type,
+                instructions=activity_data.get("instructions", ""),
+                content=json.dumps(activity_data.get("content", "")) if isinstance(activity_data.get("content"), (dict, list)) else activity_data.get("content", "")
+            )
+            session.add(new_activity)
 
     session.commit()
     session.refresh(topic)
