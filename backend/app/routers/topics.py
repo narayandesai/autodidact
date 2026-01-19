@@ -34,28 +34,29 @@ async def generate_topic_syllabus(
 
     # 2. Parse and Save to DB (Recursive function)
     
-    def create_topic_recursive(data: dict, parent_id: uuid.UUID | None = None, order: int = 0) -> Topic:
-        # Create the current topic
-        topic = Topic(
-            title=data["title"],
-            description=data.get("description", ""),
-            parent_id=parent_id,
-            order_index=order
-        )
-        session.add(topic)
-        session.commit() # Commit to get the ID
-        session.refresh(topic)
-
-        # Handle "modules" or "subtopics"
-        children = data.get("modules", []) + data.get("subtopics", [])
-        
-        for i, child in enumerate(children):
-            create_topic_recursive(child, parent_id=topic.id, order=i)
-            
-        return topic
-
-    root_topic = create_topic_recursive(syllabus_data)
+    # 2. Parse and Save to DB (Recursive function)
+    root_topic = create_topic_recursive(session, syllabus_data)
     return root_topic
+
+def create_topic_recursive(session: Session, data: dict, parent_id: uuid.UUID | None = None, order: int = 0) -> Topic:
+    # Create the current topic
+    topic = Topic(
+        title=data["title"],
+        description=data.get("description", ""),
+        parent_id=parent_id,
+        order_index=order
+    )
+    session.add(topic)
+    session.commit() # Commit to get the ID
+    session.refresh(topic)
+
+    # Handle "subtopics"
+    children = data.get("subtopics", [])
+    
+    for i, child in enumerate(children):
+        create_topic_recursive(session, child, parent_id=topic.id, order=i)
+        
+    return topic
 
 @router.post("/{topic_id}/elaborate", response_model=Topic)
 async def elaborate_topic(
@@ -91,13 +92,7 @@ async def elaborate_topic(
     next_order = len(existing_children)
 
     for sub in data.get("subtopics", []):
-        new_topic = Topic(
-            title=sub["title"],
-            description=sub.get("description", ""),
-            parent_id=topic.id,
-            order_index=next_order
-        )
-        session.add(new_topic)
+        create_topic_recursive(session, sub, parent_id=topic.id, order=next_order)
         next_order += 1
 
     # 3. Add Resources
