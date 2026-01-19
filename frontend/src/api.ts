@@ -128,3 +128,75 @@ export async function uploadPdfResource(topicId: string, file: File, modelName?:
     }
     return response.json();
 }
+
+// --- Pedagogy ---
+
+export interface Concept {
+    id: string;
+    topic_id: string;
+    title: string;
+    description: string;
+    order_index: number;
+}
+
+export interface Activity {
+    id: string;
+    concept_id: string;
+    type: "read" | "watch" | "quiz" | "code" | "write";
+    instructions: string;
+    content: any;
+    status: "pending" | "completed";
+    user_score?: number;
+}
+
+export async function getConcepts(topicId: string): Promise<Concept[]> {
+    const response = await fetch(`${API_BASE}/pedagogy/concepts/?topic_id=${topicId}`);
+    if (!response.ok) {
+        throw new Error("Failed to fetch concepts");
+    }
+    return response.json();
+}
+
+export async function generateConcepts(topicId: string, modelName?: string): Promise<Concept[]> {
+    const response = await fetch(`${API_BASE}/pedagogy/concepts/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic_id: topicId, model_name: modelName })
+    });
+    if (!response.ok) {
+        throw new Error("Failed to generate concepts");
+    }
+    return response.json();
+}
+
+export async function getActivities(conceptId: string): Promise<Activity[]> {
+    const response = await fetch(`${API_BASE}/pedagogy/activities/?concept_id=${conceptId}`);
+    if (!response.ok) {
+        throw new Error("Failed to fetch activities");
+    }
+    return response.json();
+}
+
+export async function generateActivities(conceptId: string, modelName?: string): Promise<Activity[]> {
+    const response = await fetch(`${API_BASE}/pedagogy/activities/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ concept_id: conceptId, model_name: modelName })
+    });
+    if (!response.ok) {
+        throw new Error("Failed to generate activities");
+    }
+    return response.json();
+}
+
+export async function completeActivity(activityId: string, score: number): Promise<Activity> {
+    const response = await fetch(`${API_BASE}/pedagogy/activities/${activityId}/complete`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_score: score })
+    });
+    if (!response.ok) {
+        throw new Error("Failed to complete activity");
+    }
+    return response.json();
+}
