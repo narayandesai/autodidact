@@ -58,3 +58,37 @@ class Note(NoteBase, table=True):
     resource_id: Optional[uuid.UUID] = Field(default=None, foreign_key="resource.id")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ActivityType(str, Enum):
+    READ = "read"
+    WATCH = "watch"
+    QUIZ = "quiz"
+    DRILL = "drill"
+    FLASHCARD = "flashcard"
+    PROJECT = "project"
+
+class ActivityStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+
+class ConceptBase(SQLModel):
+    title: str
+    description: Optional[str] = None
+    order_index: int = 0
+
+class Concept(ConceptBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    topic_id: uuid.UUID = Field(foreign_key="topic.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+class ActivityBase(SQLModel):
+    type: ActivityType
+    instructions: str
+    content: Optional[str] = None # JSON payload for drills/quizzes
+    status: ActivityStatus = Field(default=ActivityStatus.PENDING)
+    user_score: Optional[int] = None # 1-5 Scale
+
+class Activity(ActivityBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    concept_id: uuid.UUID = Field(foreign_key="concept.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)

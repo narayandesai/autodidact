@@ -2,7 +2,7 @@ import os
 import json
 import google.generativeai as genai
 from typing import List, Dict, Any
-from app.prompts import syllabus_prompt, summary_prompt, elaboration_prompt, chat_prompt
+from app.prompts import syllabus_prompt, summary_prompt, elaboration_prompt, chat_prompt, concepts_prompt, activities_prompt
 
 # Configure the API key
 API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -61,7 +61,7 @@ class LLMService:
         return {
             "title": topic,
             "description": f"Mock syllabus for {topic} (No API Key found)",
-            "modules": [
+            "subtopics": [
                 {
                     "title": "Fundamentals",
                     "description": "Basic concepts.",
@@ -134,3 +134,43 @@ class LLMService:
             return response.text
         except Exception as e:
             return f"Error answering question: {e}"
+        except Exception as e:
+            return f"Error answering question: {e}"
+
+    async def generate_concepts(self, topic_title: str, description: str, model_name: str | None = None) -> List[Dict[str, Any]]:
+        """
+        Generates a list of concepts for a topic.
+        """
+        if not API_KEY:
+            return [
+                {"title": "Mock Concept A", "description": "Desc A", "order_index": 1},
+                {"title": "Mock Concept B", "description": "Desc B", "order_index": 2}
+            ]
+
+        prompt = concepts_prompt(topic_title, description)
+        try:
+            model = self.get_model(model_name)
+            response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+            return json.loads(response.text)
+        except Exception as e:
+            print(f"Error generating concepts: {e}")
+            raise e
+
+    async def generate_activities(self, concept_title: str, context: str, model_name: str | None = None) -> List[Dict[str, Any]]:
+        """
+        Generates a list of activities for a concept.
+        """
+        if not API_KEY:
+             return [
+                {"type": "read", "instructions": "Read Mock", "content": "Mock Content", "status": "pending"},
+                {"type": "quiz", "instructions": "Quiz Mock", "content": {"question":"?"}, "status": "pending"}
+            ]
+        
+        prompt = activities_prompt(concept_title, context)
+        try:
+            model = self.get_model(model_name)
+            response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+            return json.loads(response.text)
+        except Exception as e:
+            print(f"Error generating activities: {e}")
+            raise e

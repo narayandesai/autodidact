@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import create_db_and_tables
-from app.routers import topics, resources
+from app.routers import topics, resources, pedagogy
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,6 +21,7 @@ app.add_middleware(
 
 app.include_router(topics.router)
 app.include_router(resources.router)
+app.include_router(pedagogy.router)
 
 
 @app.get("/")
